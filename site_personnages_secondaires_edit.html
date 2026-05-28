@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Personnages secondaires — Système de jauges</title>
+  <style>
+    :root {
+      --bg: #120f08;
+      --dark2: #1a1408;
+      --dark3: #2a2112;
+      --gold: #c9a35a;
+      --gold2: #e2c27a;
+      --gold3: #a88a4a;
+      --text-main: #f5eddc;
+      --text-muted: #c7bfae;
+      --border-gold: rgba(201, 163, 90, 0.45);
+      --shadow: 0 12px 30px rgba(0,0,0,0.35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: radial-gradient(circle at top, #1a1408 0%, #120f08 55%, #0b0905 100%); color: var(--text-main); font-family: 'Crimson Pro', Georgia, serif; }
+    body { min-height: 100vh; }
+
+    .page {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 28px 18px 48px;
+    }
+
+    .hero {
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      border: 1px solid var(--border-gold);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      padding: 22px 20px;
+      margin-bottom: 18px;
+    }
+
+    .title {
+      margin: 0;
+      font-family: 'Cinzel', Georgia, serif;
+      font-size: clamp(28px, 4vw, 44px);
+      color: var(--gold2);
+      letter-spacing: 0.5px;
+    }
+
+    .subtitle {
+      margin: 8px 0 0;
+      color: var(--text-muted);
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      margin: 18px 0 16px;
+    }
+
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .faction-tab {
+      border: 1px solid var(--border-gold);
+      background: rgba(26,20,8,0.75);
+      color: var(--text-main);
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-family: 'Cinzel', Georgia, serif;
+      font-size: 13px;
+      transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+    }
+
+    .faction-tab:hover { transform: translateY(-1px); }
+    .faction-tab.active {
+      background: rgba(201,163,90,0.18);
+      border-color: rgba(226,194,122,0.9);
+      color: var(--gold2);
+    }
+
+    .hint {
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }
+
+    .card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(226,194,122,0.9) !important;
+      box-shadow: 0 14px 26px rgba(0,0,0,0.28);
+    }
+
+    .empty {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 32px 18px;
+      color: var(--text-muted);
+      border: 1px dashed var(--border-gold);
+      border-radius: 14px;
+      background: rgba(26,20,8,0.45);
+    }
+
+    .footer-note {
+      margin-top: 18px;
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    #secondary-modal-layer {
+      backdrop-filter: blur(4px);
+      padding: 18px;
+    }
+
+    #secondary-modal-layer[style*="display: none"] { pointer-events: none; }
+
+    @media (max-width: 560px) {
+      .page { padding: 16px 12px 36px; }
+      .hero { padding: 18px 14px; }
+      .toolbar { align-items: stretch; }
+      .hint { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <h1 class="title">Module des 43 personnages secondaires</h1>
+      <p class="subtitle">
+        Clique sur un personnage pour ouvrir sa fiche détaillée. Les jauges indiquent l’alignement actuel, et les onglets filtrent par faction.
+      </p>
+    </section>
+
+    <section class="toolbar">
+      <div class="tabs" aria-label="Filtres de faction">
+        <button class="faction-tab active" onclick="filterFaction('all', this)">Tous</button>
+        <button class="faction-tab" onclick="filterFaction('cour', this)">Cour</button>
+        <button class="faction-tab" onclick="filterFaction('magie', this)">Magie</button>
+        <button class="faction-tab" onclick="filterFaction('peuple', this)">Peuple</button>
+        <button class="faction-tab" onclick="filterFaction('nord', this)">Nord</button>
+      </div>
+      <div class="hint">Astuce : la fonction <strong>updateCharacterAlignment(id, amount)</strong> permet de faire évoluer les jauges.</div>
+    </section>
+
+    <section id="secondary-grid" class="grid" aria-live="polite"></section>
+
+    <div class="footer-note">
+      Site autonome en un seul fichier HTML · fond sombre · cartes interactives · modale détaillée.
+    </div>
+  </main>
+
+  <script>
+    // =========================================================================
+    // MODULE DES 17 PERSONNAGES SECONDAIRES & SYSTÈME DE JAUGES DYNAMIQUES
+    // =========================================================================
+
+    const CHARS_SECONDARY = [
+      {
+        id:21, name:"Vicomte Edran Solys", initials:"ES", cat:"cour",
+        role:"Cousin d'Edwin · Cour impériale", age:"~16 ans",
+        color:"#FAEEDA", tc:"#633806", defaultPos:55, dotColor:"#888780",
+        desc:"Cousin négligé du prince. Ni aimé ni détesté. Une tête pensante que personne ne surveille.",
+        personality:"Orgueilleux en surface mais profondément complexé par l'ombre d'Edwin. Cherche quelqu'un qui le voit vraiment.",
+        triggerAlly:["Lui parler en privé sans le comparer à Edwin","Lui confier une mission digne","Reconnaître son intelligence"],
+        triggerEnemy:["L'ignorer en public","Mentionner Edwin dans chaque interaction","Le traiter comme un simple faire-valoir"],
+        allyValue:"Espion parfait à la cour — personne ne le surveille, il entend tout.",
+        enemyValue:"Peut transmettre des informations à Edwin ou Charlotte par dépit.",
+        volatile:false
+      },
+      {
+        id:22, name:"Prêtresse Lyra Vel", initials:"LV", cat:"magie",
+        role:"Temple de la Lumière · Cercle magique", age:"~30 ans",
+        color:"#E6F1FB", tc:"#0C447C", defaultPos:60, dotColor:"#1D9E75",
+        desc:"Gardienne du temple, a étudié toute sa vie les pouvoirs de Lumière divine. Elle attend depuis l'enfance la venue d'une Sainte.",
+        personality:"Fervente, mais pas aveugle. Elle vérifiera avant de croire. Si Irène montre un seul éclat de Lumière authentique, sa dévotion sera totale.",
+        triggerAlly:["Manifester un pouvoir de Lumière, même minime","Visiter le temple sincèrement","Lui montrer la marque de naissance des Ravel (liée à la Lumière)"],
+        triggerEnemy:["Mentir sur ses pouvoirs","Laisser Charlotte la séduire en premier","Ternir la réputation du temple par maladresse politique"],
+        allyValue:"Légitimité religieuse absolue. Peut officialiser qu'Irène est la vraie Sainte de Lumière — arme contre Charlotte.",
+        enemyValue:"Si elle croit Charlotte d'abord, elle peut mobiliser tout le clergé contre Irène.",
+        volatile:false
+      },
+      {
+        id:23, name:"Lord Cael Durnir", initials:"CD", cat:"cour",
+        role:"Famille fondatrice · Rival des Ravel", age:"~44 ans",
+        color:"#F1EFE8", tc:"#444441", defaultPos:30, dotColor:"#E24B4A",
+        desc:"Rival historique des Ravel. Attend une fissure dans la famille pour frapper. L'arrivée de Charlotte est une aubaine pour lui.",
+        personality:"Très patient. N'agit que quand le rapport de force lui est favorable. Respecte uniquement la force et la stabilité.",
+        triggerAlly:["Lui proposer une alliance contre une menace commune (Charlotte, Empire Obériane)","Lui accorder un avantage commercial via Cassian","Démontrer qu'Irène est plus stable que le clan Charlotte"],
+        triggerEnemy:["Laisser les Ravel paraître faibles","Refuser son offre d'alliance sans contrepartie","S'allier à un de ses ennemis directs"],
+        allyValue:"Son réseau et ses ressources renforcent considérablement la maison Ravel.",
+        enemyValue:"Peut financer la légitimation publique de Charlotte pour affaiblir Aldric.",
+        volatile:false
+      },
+      {
+        id:24, name:"Mira la Marchande", initials:"MM", cat:"peuple",
+        role:"Réseau commercial du peuple · Ombre", age:"~35 ans",
+        color:"#FAEEDA", tc:"#633806", defaultPos:50, dotColor:"#888780",
+        desc:"Marchande de tissu en façade, véritable coordinatrice d'un réseau d'informateurs dans les bas quartiers. Connait tous les secrets.",
+        personality:"Pragmatique absolue. Ne jure par aucune maison. Mais a une haine profonde des puissants qui écrasent le petit peuple — si Irène montre qu'elle est différente, Mira est à elle.",
+        triggerAlly:["Intervenir publiquement pour protéger un marchand ou paysan injustement traité","Payer juste prix sans négocier vers le bas","Lui confier un secret compromettant (crée une dette mutuelle)"],
+        triggerEnemy:["Trahir un de ses contacts même sans le savoir","Se comporter en noble dédaigneuse","Utiliser ses infos sans contrepartie"],
+        allyValue:"Yeux et oreilles dans tout l'Empire, y compris là où aucun noble ne peut aller.",
+        enemyValue:"Peut vendre les mouvements et plans d'Irène à Charlotte ou à n'importe qui.",
+        volatile:false
+      },
+      {
+        id:25, name:"Seigneur Vael Ossyr", initials:"VO", cat:"nord",
+        role:"Vassal du Grand Duc · Nord", age:"~40 ans",
+        color:"#E1F5EE", tc:"#085041", defaultPos:50, dotColor:"#888780",
+        desc:"Vassal fidèle de Cassian mais jaloux de l'influence que pourrait prendre Irène sur son suzerain. Un rival interne au camp du Nord.",
+        personality:"Loyal à Cassian par intérêt autant que par respect. L'idée qu'une femme du Sud puisse entrer dans le cercle intime du Duc l'irrite profondément.",
+        triggerAlly:["Lui prouver ses compétences au combat ou à la stratégie","Respecter les codes d'honneur du Nord","Sauver sa vie ou celle d'un de ses hommes"],
+        triggerEnemy:["Paraître faible ou manipulatrice","Blesser l'honneur du Nord par ignorance culturelle","Court-circuiter Cassian sans le consulter"],
+        allyValue:"Ouvre les portes des autres vassaux du Nord — si Vael accepte Irène, les autres suivent.",
+        enemyValue:"Peut convaincre Cassian qu'Irène est une menace pour l'autonomie du Nord.",
+        volatile:false
+      },
+      {
+        id:26, name:"Théa la Guérisseuse", initials:"TG", cat:"peuple",
+        role:"Guérisseuse itinérante · Peuple", age:"~28 ans",
+        color:"#EAF3DE", tc:"#27500A", defaultPos:65, dotColor:"#1D9E75",
+        desc:"Guérisseuse sans titre ni maison, qui soigne les soldats et les pauvres. Déteste Charlotte d'instinct — son 'aura de guérison' lui semble fausse depuis le début.",
+        personality:"Directe, sans fioritures. Juge les gens sur ce qu'ils font de leurs mains et pas de leur rang. A un vrai don de perception magique non formé.",
+        triggerAlly:["Soigner quelqu'un de ses propres mains sans magie","Reconnaître publiquement son savoir","L'aider à obtenir un accès légal pour soigner dans les casernes"],
+        triggerEnemy:["Lui imposer des ordres comme à une servante","Prendre le crédit de ses guérisons","Montrer du dédain pour la médecine non magique"],
+        allyValue:"Peut confirmer empiriquement que la magie de Charlotte est une illusion — témoignage du peuple.",
+        enemyValue:"Peut répandre dans les casernes qu'Irène est aussi froide et calculatrice que la noblesse.",
+        volatile:false
+      },
+      {
+        id:27, name:"Baron Aldis Veyne", initials:"AV", cat:"cour",
+        role:"Petit baron · Opportuniste de cour", age:"~32 ans",
+        color:"#F1EFE8", tc:"#444441", defaultPos:50, dotColor:"#7F77DD",
+        desc:"Petit noble sans grande fortune ni pouvoir. Se rallie toujours au camp qui semble gagner. Imprévisible car entièrement guidé par la survie.",
+        personality:"Couard mais pas stupide. Il a une boussole interne très précise : vers qui le vent souffle-t-il aujourd'hui ? Peut changer de camp trois fois dans une même saison.",
+        triggerAlly:["Lui offrir une garantie de survie concrète","Lui montrer qu'Irène sera la gagnante avant tout le monde"],
+        triggerEnemy:["Paraître perdante face à Charlotte ou Edwin","Ne pas lui accorder de protection"],
+        allyValue:"Effet domino — quand Aldis rejoint un camp, cinq autres petits barons suivent.",
+        enemyValue:"Trahira sans hésitation si le vent tourne — et avec lui, les infos confidentielles.",
+        volatile:true
+      },
+      {
+        id:28, name:"Capitaine Rynn Aude", initials:"RA", cat:"nord",
+        role:"Capitaine de garnison du Nord", age:"~34 ans",
+        color:"#E1F5EE", tc:"#085041", defaultPos:50, dotColor:"#888780",
+        desc:"Capitaine qui commande la garnison frontière entre l'Empire et l'Irsia. Ni pro-Empire ni pro-Nord — il protège ses hommes avant tout.",
+        personality:"Vétéran désabusé. A vu trop de nobles envoyer des soldats mourir pour des intrigues. Fera confiance à qui prouve qu'il compte sur lui pour vivre.",
+        triggerAlly:["Demander son avis tactique et l'écouter vraiment","Refuser d'exposer inutilement ses hommes","Lui donner de l'équipement ou des provisions en dehors de tout protocole"],
+        triggerEnemy:["Traiter ses soldats comme des pions","Passer au-dessus de lui pour donner des ordres à ses hommes","Mentir sur les risques d'une mission"],
+        allyValue:"Passage sécurisé entre l'Empire et le Nord. Clé pour la Fin 8.",
+        enemyValue:"Peut fermer la frontière ou alerter l'Empire des mouvements d'Irène.",
+        volatile:false
+      },
+      {
+        id:29, name:"Sybil l'Archiviste", initials:"SA", cat:"magie",
+        role:"Archiviste impériale · Cercle magique", age:"~55 ans",
+        color:"#EEEDFE", tc:"#3C3489", defaultPos:55, dotColor:"#888780",
+        desc:"Garde les archives secrètes de l'Empire, y compris les registres des pouvoirs dormants et des lignées magiques. Sait des choses que personne d'autre ne sait.",
+        personality:"Neutre par vocation. Mais a une passion secrète : voir les vérités historiques respectées. Si Irène est la vraie héritière de la Lumière, elle le sait — et ne peut pas laisser le mensonge gagner.",
+        triggerAlly:["Lui apporter une preuve historique de la lignée de Lumière des Ravel","Accéder aux archives via les règles sans les contourner","La remercier sans chercher de faveur supplémentaire"],
+        triggerEnemy:["Forcer l'accès aux archives","Détruire ou falsifier un document","L'utiliser pour espionner sans lui dire la vérité"],
+        allyValue:"Accès aux archives secrètes — preuves sur Charlotte, sur les familles fondatrices, sur les pouvoirs d'Irène.",
+        enemyValue:"Peut verrouiller tout accès à l'information et alerter la cour d'une tentative de falsification.",
+        volatile:false
+      },
+      {
+        id:30, name:"Prince Théorn (2e fils)", initials:"PT", cat:"cour",
+        role:"Second prince · Frère cadet d'Edwin", age:"~6 ans",
+        color:"#EEEDFE", tc:"#3C3489", defaultPos:60, dotColor:"#7F77DD",
+        desc:"Le fils oublié. Edwin est la star, Théorn est l'ombre. Si Irène lui tend la main sincèrement dès l'enfance, elle gagne un allié au cœur même de la famille impériale.",
+        personality:"Sensible, curieux, légèrement jaloux de son frère mais pas mauvais. Très impressionnable — ses affinités se forment tôt et durent toute sa vie.",
+        triggerAlly:["Jouer avec lui dans l'enfance","Lui apporter un cadeau qui prouve qu'on se souvient de lui","Le défendre contre les humiliations d'Edwin"],
+        triggerEnemy:["L'ignorer car 'il n'est que le second'","Utiliser son amitié pour approcher Edwin","Lui mentir, même une fois"],
+        allyValue:"Accès discret à la famille royale. Dans les fins tardives, peut témoigner en faveur d'Irène face à Edwin.",
+        enemyValue:"Peut avertir Edwin de chaque mouvement d'Irène s'il se sent trahi.",
+        volatile:true
+      },
+      {
+        id:31, name:"Maître Doran Falt", initials:"DF", cat:"magie",
+        role:"Alchimiste de cour · Cercle magique", age:"~48 ans",
+        color:"#EEEDFE", tc:"#3C3489", defaultPos:40, dotColor:"#E24B4A",
+        desc:"Alchimiste impérial qui prépare les potions pour la famille royale. Dans Fin 12, c'est lui qui produit (involontairement ou non) le poison de Charlotte.",
+        personality:"Arrogant, se croit au-dessus des intrigues politiques. Sert qui paie. Sa loyauté est au plus offrant.",
+        triggerAlly:["Lui offrir un accès à des ingrédients rares du Nord (via Cassian)","Lui proposer un financement de recherche hors politique","Le consulter comme expert — flatter son ego"],
+        triggerEnemy:["Montrer du dédain pour l'alchimie","Refuser de le payer à sa hauteur","Exposer ses expériences douteuses"],
+        allyValue:"Peut créer des antidotes, des potions de réveil des pouvoirs, des détecteurs de poison.",
+        enemyValue:"Dans Fin 12, c'est sa production qui contamine les réserves. À neutraliser tôt.",
+        volatile:false
+      },
+      {
+        id:32, name:"Solde la Tisseuse d'Ombres", initials:"SO", cat:"peuple",
+        role:"Informateur du sous-monde · Ombre", age:"~27 ans",
+        color:"#F1EFE8", tc:"#444441", defaultPos:50, dotColor:"#7F77DD",
+        desc:"Pas de famille, pas de maison. Vit dans les interstices de l'Empire. Connaît tous les trafics, tous les secrets honteux de la noblesse.",
+        personality:"Imprévisible car entièrement fidèle à ses propres règles, qui ne ressemblent à aucun code noble. Fascinée par les gens qui brisent les règles de façon intelligente.",
+        triggerAlly:["Lui montrer qu'on joue aussi hors-règles quand c'est nécessaire","Ne jamais la trahir même sous pression","Reconnaître sa valeur hors de la hiérarchie noble"],
+        triggerEnemy:["Essayer de la contrôler ou la menacer","Utiliser ses infos contre des gens du peuple","Montrer qu'on la méprise malgré les apparences"],
+        allyValue:"Réseau de contre-espionnage. Sait tout sur Charlotte que la cour ne voit pas.",
+        enemyValue:"Peut vendre tout ce qu'elle sait sur Irène à qui le veut — et elle en sait beaucoup.",
+        volatile:true
+      },
+      {
+        id:33, name:"Comtesse Elara Mirot", initials:"EM", cat:"cour",
+        role:"Dame de cour · Influence sociale", age:"~19 ans",
+        color:"#FBEAF0", tc:"#72243E", defaultPos:45, dotColor:"#888780",
+        desc:"L'influenceuse sociale de la cour. Son opinion fait ou défait les réputations. Dans le roman original, elle abandonne Irène pour Charlotte qui est 'tellement plus pure'.",
+        personality:"Superficielle en apparence, mais observe tout. Récompense les gens qui font ce qu'ils disent.",
+        triggerAlly:["Lui donner raison publiquement quand elle a raison","Lui offrir un accès exclusif à une information de cour","Ne jamais paraître fausse devant elle — elle dote tout"],
+        triggerEnemy:["Paraître hypocrite ou calculatrice","Laisser Charlotte se montrer plus 'authentique'","Snober ses cercles sociaux"],
+        allyValue:"Contrôle le récit de cour. Si Elara dit qu'Irène est légitime, la moitié de la noblesse suit.",
+        enemyValue:"Peut construire méthodiquement la mauvaise réputation d'Irène — sourire compris.",
+        volatile:false
+      },
+      {
+        id:34, name:"Maître d'Armes Brek Osval", initials:"BO", cat:"nord",
+        role:"Instructeur militaire du Nord", age:"~42 ans",
+        color:"#E1F5EE", tc:"#085041", defaultPos:30, dotColor:"#E24B4A",
+        desc:"Instructeur légendaire du Nord. Refuse catégoriquement d'entraîner qui n'est pas du Nord. Méprise d'emblée toute noble du Sud.",
+        personality:"Brutal, direct, sans diplomatie. Mais d'une loyauté absolue envers ceux qui 'méritent' à ses yeux. Ses critères sont simples : persévérance, honnêteté, et ne jamais pleurer sur une blessure.",
+        triggerAlly:["Revenir après une humiliation et recommencer","Ne jamais invoquer son titre noble pour esquiver l'entraînement","Lui demander d'être dur, pas gentil"],
+        triggerEnemy:["Se plaindre de la dureté de l'entraînement","Utiliser la magie pour compenser le manque de technique","Arriver en retard plus d'une fois"],
+        allyValue:"Entraînement d'élite. Irène à niveau Nord = crédibilité militaire totale pour la Fin 8 et 22.",
+        enemyValue:"Peut convaincre toute l'armée du Nord qu'Irène n'est pas à sa place.",
+        volatile:false
+      },
+      {
+        id:35, name:"Evan le Troubadour", initials:"ET", cat:"peuple",
+        role:"Barde itinérant · Mémoire du peuple", age:"~24 ans",
+        color:"#FAEEDA", tc:"#633806", defaultPos:60, dotColor:"#1D9E75",
+        desc:"Barde qui voyage dans tout l'Empire. Ses chansons façonnent l'opinion publique — pour ou contre, selon ce qu'il a vu.",
+        personality:"Romantique et idéaliste. Croit aux héros. Si Irène accomplit quelque chose de beau devant lui — même un petit geste — il en fera une légende.",
+        triggerAlly:["Accomplir un acte courageux ou généreux en public","Lui offrir une histoire vraie à chanter","Le laisser raconter sa version sans censure"],
+        triggerEnemy:["Interdire ses chansons sur la cour","Acheter son silence","Paraître calculatrice devant lui"],
+        allyValue:"Construit la légende d'Irène dans le peuple. Indispensable pour la légitimité populaire des Fins 2 et 8.",
+        enemyValue:"Peut populariser la version de Charlotte — 'la Sainte persécutée par la noble jalouse'.",
+        volatile:false
+      },
+      {
+        id:36, name:"Hilde la Forgée", initials:"HF", cat:"nord",
+        role:"Guerrière du Nord · Vassale de Cassian", age:"~26 ans",
+        color:"#E1F5EE", tc:"#085041", defaultPos:25, dotColor:"#E24B4A",
+        desc:"Guerrière d'élite du Nord. A perdu sa famille dans une guerre liée à l'Empire. Hait tout ce qui vient du Sud par réflexe. Mais son code d'honneur est implacable.",
+        personality:"Hostile d'entrée. Teste Irène dès le premier regard. Mais si Irène survit à ses tests — au sens propre parfois — Hilde deviendra sa garde du corps la plus féroce.",
+        triggerAlly:["Accepter un duel à sa demande sans protester","Soigner ses blessés après une bataille","Lui dire la vérité sur l'Empire même si c'est inconfortable"],
+        triggerEnemy:["Invoquer l'autorité de Cassian pour la faire obéir","Fuir un affrontement qu'elle aurait dû accepter","Paraître condescendante envers les guerrières"],
+        allyValue:"Garde du corps absolue. Dans Fin 22, elle combat sous les ordres d'Irène jusqu'à la mort.",
+        enemyValue:"Peut organiser une résistance interne au Nord contre la présence d'Irène dans l'Irsia.",
+        volatile:false
+      },
+      {
+        id:37, name:"Père Ossian (clerc)", initials:"PO", cat:"magie",
+        role:"Clerc du temple mineur · Cercle magique", age:"~65 ans",
+        color:"#EEEDFE", tc:"#3C3489", defaultPos:55, dotColor:"#888780",
+        desc:"Vieux clerc d'un temple de province. Personne ne le surveille, personne ne l'écoute. Mais il tient les registres des naissances marquées par la Lumière depuis 40 ans.",
+        personality:"Tranquille, patient, un peu sourd. Mais sa mémoire est un coffre-fort. Il a noté chaque naissance avec signe de Lumière, y compris celle d'Irène — et peut-être pas celle de Charlotte.",
+        triggerAlly:["Aller le voir en personne, sans envoyé","Lui apporter de l'aide pour son temple délabré","Lui demander de lire ses registres comme un acte de respect, pas d'urgence"],
+        triggerEnemy:["Envoyer quelqu'un à sa place","Réclamer ses registres par autorité","Oublier de revenir après une première visite"],
+        allyValue:"Preuve légale et spirituelle : Irène est dans les registres de Lumière. Charlotte n'y est pas.",
+        enemyValue:"Si Charlotte le trouve en premier, ses registres peuvent 'disparaître' — ou être falsifiés.",
+        volatile:false
+      },
+
+      // ── 26 NOUVEAUX PERSONNAGES (IDs 38–63) ──────────────────────────────
+
+      // COUR (8)
+      {
+        id:38, name:"Duchesse Orvaine Selyr", initials:"OS", cat:"cour",
+        role:"Grande dame de cour · Matriache des Selyr", age:"~58 ans",
+        color:"#FBEAF0", tc:"#72243E", defaultPos:40, dotColor:"#E24B4A",
+        desc:"Matriache d'une des familles fondatrices. A survécu à cinq règnes en changeant d'alliance à chaque fois. Irène est pour elle une pièce à utiliser, pas une personne.",
+        personality:"Froidement calculatrice. Sourit toujours. Sait exactement ce que chaque personne dans la pièce veut. Peut être une alliée redoutable si ses intérêts sont alignés — mais jamais par loyauté.",
+        triggerAlly:["Lui proposer un mariage politique avantageux pour sa lignée","Lui prouver qu'Irène sera impératrice avant les autres","Protéger un de ses petits-enfants dans une scène publique"],
+        triggerEnemy:["La faire attendre","Refuser ses arrangements sans offrir mieux","Montrer qu'on la sous-estime"],
+        allyValue:"Son réseau de maris, fils et brus à travers toutes les maisons nobles couvre l'Empire entier.",
+        enemyValue:"Peut orchestrer une campagne de dénigrement social silencieuse et totalement invisible.",
+        volatile:false
+      },
+      {
+        id:39, name:"Intendant Pell Corro", initials:"PC", cat:"cour",
+        role:"Intendant impérial · Finances de la Cour", age:"~50 ans",
+        color:"#F1EFE8", tc:"#444441", defaultPos:50, dotColor:"#888780",
+        desc:"Génie des comptes. Sait exactement où va chaque pièce d'or de l'Empire. Personne ne fait quoi que ce soit d'important sans passer par lui.",
+        personality:"Ennuyeux en apparence, redoutable en réalité. Il sait que Charlotte a des fonds qui n'existent sur aucun registre officiel — et il attend que quelqu'un lui pose la bonne question.",
+        triggerAlly:["Lui poser la bonne question sur les finances secrètes de Charlotte","Le remercier pour son travail sans chercher à le corrompre","Lui montrer qu'on respecte les règles comptables"],
+        triggerEnemy:["Tenter de corrompre ses registres","Le court-circuiter pour accéder aux caisses","Traiter la comptabilité comme un détail sans importance"],
+        allyValue:"Preuve financière du financement secret de Charlotte. Clé pour plusieurs fins de trahison.",
+        enemyValue:"Peut faire disparaître des fonds d'Irène ou bloquer ses accès aux ressources impériales.",
+        volatile:false
+      },
+      {
+        id:40, name:"Dame Vess Auryn", initials:"VA", cat:"cour",
+        role:"Dame d'honneur · Ancienne amie d'Irène", age:"~20 ans",
+        color:"#FBEAF0", tc:"#72243E", defaultPos:65, dotColor:"#1D9E75",
+        desc:"Elles ont grandi ensemble. Vess croit encore en Irène, mais l'arrivée de Charlotte l'a déstabilisée. Elle est à la croisée des chemins.",
+        personality:"Loyale par instinct mais fragile sous pression. Une seule trahison de la part d'Irène — même involontaire — et elle bascule définitivement dans le camp de Charlotte.",
+        triggerAlly:["Prendre le temps de lui parler seule, sans politique","Reconnaître une erreur passée envers elle","La défendre quand Charlotte l'humilie"],
+        triggerEnemy:["L'oublier dans un moment de crise","La traiter comme une ressource plutôt qu'une amie","Mentir sur quelque chose qu'elle a vu elle-même"],
+        allyValue:"Témoin de confiance au sein de la cour. Sa parole compte car tout le monde sait qu'elle n'est pas ambitieuse.",
+        enemyValue:"Peut raconter à Charlotte tous les moments de faiblesse ou de doute d'Irène.",
+        volatile:true
+      },
+      {
+        id:41, name:"Lord Haarn Duvex", initials:"HD", cat:"cour",
+        role:"Seigneur de guerre · Conseil impérial", age:"~52 ans",
+        color:"#F1EFE8", tc:"#444441", defaultPos:35, dotColor:"#E24B4A",
+        desc:"Vieux général reconverti en politique. Convaincu que les femmes n'ont rien à faire dans les cercles de pouvoir militaire. Soutient Charlotte car elle 'sait sa place'.",
+        personality:"Pas malveillant — juste profondément conservateur. Peut évoluer si Irène lui prouve par les faits qu'il a tort. Mais il faut des faits, pas des mots.",
+        triggerAlly:["Remporter une victoire tactique qu'il ne croyait pas possible","Sauver ses hommes dans une situation désespérée","Citer ses propres écrits militaires avec précision"],
+        triggerEnemy:["Argumenter sur l'égalité des sexes sans démonstration concrète","Paraître hésitante face à une décision militaire","Contourner sa hiérarchie par une manœuvre politique"],
+        allyValue:"Sa conversion publique vaut la moitié de l'armée. Si Haarn dit 'elle est prête', les généraux suivent.",
+        enemyValue:"Peut bloquer toute nomination militaire d'Irène au Conseil.",
+        volatile:false
+      },
+      {
+        id:42, name:"Conseiller Sorn Ivel", initials:"SI", cat:"cour",
+        role:"Conseiller privé de l'Empereure", age:"~60 ans",
+        color:"#F1EFE8", tc:"#444441", defaultPos:45, dotColor:"#888780",
+        desc:"L'oreille droite de l'Empereure. Un homme qui ne dit jamais ce qu'il pense, mais dont l'avis modifie chaque décision du trône.",
+        personality:"Maître de l'implicite. Parle par métaphores et sous-entendus. Teste constamment la subtilité de ses interlocuteurs. Ne supporte pas la brutalité rhétorique.",
+        triggerAlly:["Répondre à ses métaphores par d'autres métaphores","Lui apporter une information que personne d'autre ne lui a donnée","Poser une question à laquelle il ne s'attendait pas"],
+        triggerEnemy:["Parler directement quand il cherche la nuance","Se vanter d'une victoire en sa présence","Ignorer ses sous-entendus par impatience"],
+        allyValue:"Peut orienter les décisions de l'Empereure en faveur d'Irène sans que personne ne s'en rende compte.",
+        enemyValue:"Peut convaincre l'Empereure de méfiance totale envers Irène en dix minutes de conversation.",
+        volatile:false
+      },
+      {
+        id:43, name:"Marquise Tirel Solane", initials:"TS", cat:"cour",
+        role:"Marquise · Rivale sociale d'Elara Mirot", age:"~22 ans",
+        color:"#FBEAF0", tc:"#72243E", defaultPos:55, dotColor:"#888780",
+        desc:"Rivale d'Elara Mirot dans la guerre des opinions de cour. Tout ce qu'Elara soutient, Tirel s'y oppose — et vice-versa. Si Elara choisit Charlotte, Tirel choisira Irène.",
+        personality:"Contradictoire par principe. Mais pas idiote — elle a ses propres raisons, qui correspondent à une vraie lecture du pouvoir.",
+        triggerAlly:["Laisser Elara Mirot se positionner publiquement avant d'approcher Tirel","Lui proposer une alliance tacite sans la nommer explicitement","Valoriser son intelligence analytique, pas sa beauté"],
+        triggerEnemy:["Approcher Tirel après Elara — trop tard, elle suivra son instinct de contradiction","Mentionner Elara comme modèle à suivre","Traiter la rivalité des deux comme enfantine"],
+        allyValue:"Crée un deuxième pôle d'opinion à la cour, rendant le bloc Charlotte minoritaire.",
+        enemyValue:"Peut se retourner contre Irène si Elara change de camp — pure mécanique de contrariété.",
+        volatile:true
+      },
+      {
+        id:44, name:"Chambellan Udo Preyn", initials:"UP", cat:"cour",
+        role:"Chambellan impérial · Protocole et accès", age:"~46 ans",
+        color:"#F1EFE8", tc:"#444441", defaultPos:50, dotColor:"#888780",
+        desc:"Contrôle qui entre dans les appartements privés de la famille impériale. Sa neutralité est une façade — il est manipulable par vanité.",
+        personality:"Obsédé par son importance dans le protocole. La moindre marque de reconnaissance de son rôle le flatte infiniment.",
+        triggerAlly:["Lui demander conseil sur le protocole en public","Lui remettre une invitation officielle par lui, pas par un serviteur","Mentionner son nom comme référence dans la bonne société"],
+        triggerEnemy:["Passer une porte sans lui demander","Se moquer des règles de protocole","Traiter le chambellan comme un simple portier"],
+        allyValue:"Peut arranger des audiences privées impossibles — y compris avec l'Empereure en pleine crise.",
+        enemyValue:"Peut bloquer l'accès d'Irène au palais pendant des jours critiques.",
+        volatile:false
+      },
+      {
+        id:45, name:"Comte Ferras Layn", initials:"FL", cat:"cour",
+        role:"Comte · Financier des fêtes impériales", age:"~38 ans",
+        color:"#F1EFE8", tc:"#444441", defaultPos:60, dotColor:"#888780",
+        desc:"Organise les fêtes, les banquets, les célébrations. En apparence futile — en réalité, c'est lui qui choisit qui est invité et qui ne l'est pas.",
+        personality:"Joyeux, léger, adoré de tous. Cache derrière les festivités un réseau d'obligations sociales soigneusement entretenu.",
+        triggerAlly:["Être remarquable lors d'une de ses fêtes","Lui apporter un cadeau rare de bon goût","Lui demander d'organiser quelque chose pour le peuple — pas seulement la noblesse"],
+        triggerEnemy:["Ne pas se montrer à ses célébrations","Paraître froide ou distante en public","Refuser une invitation sous prétexte de politique"],
+        allyValue:"Les invitations aux événements clés. La présence visible d'Irène dans les cercles de pouvoir informel.",
+        enemyValue:"Peut exclure Irène de tous les cercles sociaux qui comptent — poliment, sans justification.",
+        volatile:false
+      },
+
+      // MAGIE (6)
+      {
+        id:46, name:"Archimage Sora Valdine", initials:"SV", cat:"magie",
+        role:"Archimage · Tête du Cercle magique", age:"~70 ans",
+        color:"#EEEDFE", tc:"#3C3489", defaultPos:35, dotColor:"#E24B4A",
+        desc:"Chef suprême du Cercle. A passé sa vie à empêcher les pouvoirs de Lumière de revenir — par peur que leur retour bouleverse l'équilibre qu'il a construit.",
+        personality:"Pas un méchant. Un homme terrifié par le changement. Si Irène parvient à le convaincre que son pouvoir est stable et non destructeur, il peut devenir son plus grand soutien.",
+        triggerAlly:["Montrer un contrôle parfait de son pouvoir, pas d'explosion","Lui exposer un plan de transition magique, pas une révolution","Le traiter en partenaire, pas en obstacle"],
+        triggerEnemy:["Manifester un pouvoir incontrôlé devant lui","L'accuser publiquement de complot","Contourner le Cercle pour obtenir une légitimation magique"],
+        allyValue:"Sa bénédiction officielle = la Lumière d'Irène est reconnue comme force stabilisatrice. Fin 4 débloquée.",
+        enemyValue:"Peut bannir Irène du Cercle et interdire l'utilisation de la Lumière sous peine de mort.",
+        volatile:false
+      },
+      {
+        id:47, name:"Novice Cael Orn", initials:"CO", cat:"magie",
+        role:"Novice du Cercle · Admirateur secret", age:"~17 ans",
+        color:"#EEEDFE", tc:"#3C3489", defaultPos:70, dotColor:"#1D9E75",
+        desc:"Jeune novice du Cercle magique, fasciné par les pouvoirs de Lumière. A lu tout ce qui existe sur les Saintes de Lumière. Reconnaîtrait Irène entre mille.",
+        personality:"Enthousiaste, maladroit, absolument sincère. Sa loyauté est totale une fois acquise — et elle se gagne facilement, peut-être trop.",
+        triggerAlly:["Lui expliquer les bases de la Lumière comme à un égal","Le laisser être présent lors d'une manifestation de pouvoir","Défendre sa place au Cercle contre ses aînés qui le méprisent"],
+        triggerEnemy:["L'humilier sur son manque de puissance magique","Exploiter son enthousiasme pour de la surveillance","L'ignorer car 'il n'est que novice'"],
+        allyValue:"Messager fiable à l'intérieur du Cercle. Peut prévenir Irène des décisions prises en secret.",
+        enemyValue:"Peut involontairement divulguer des informations sur Irène par naïveté, pas par trahison.",
+        volatile:false
+      },
+      {
+        id:48, name:"Enchanteresse Dala Myre", initials:"DM", cat:"magie",
+        role:"Enchanteresse de cour · Illusions et divination", age:"~33 ans",
+        color:"#EEEDFE", tc:"#3C3489", defaultPos:40, dotColor:"#E24B4A",
+        desc:"Spécialiste des illusions. Sait que les pouvoirs de Charlotte sont entièrement simulés. Mais on la paie pour se taire.",
+        personality:"Cynique et vénale. Mais a une limite : elle refuse que des innocents meurent pour une imposture. Si Irène lui prouve que Charlotte causera des morts, elle parlera.",
+        triggerAlly:["Lui apporter la preuve d'un plan meurtrier de Charlotte","Lui offrir une protection après sa révélation","Ne pas lui demander de sacrifier sa sécurité pour des principes"],
+        triggerEnemy:["Lui faire la morale sur sa vénalité","Menacer de révéler sa complicité passée","Lui demander de témoigner sans garantie de protection"],
+        allyValue:"Témoignage direct : les pouvoirs de Charlotte sont une illusion entretenue. Clé des fins 6 et 14.",
+        enemyValue:"Peut créer une illusion d'Irène dans une scène compromettante — preuve fabriquée parfaite.",
+        volatile:true
+      },
+      {
+        id:49, name:"Sage Fen Aur", initials:"FA", cat:"magie",
+        role:"Ermite du désert · Ancien du Cercle", age:"~80 ans",
+        color:"#EEEDFE", tc:"#3C3489", defaultPos:50, dotColor:"#888780",
+        desc:"A quitté le Cercle il y a quarante ans après une rupture mystérieuse avec Sora Valdine. Vit seul. Sait des choses que le Cercle aurait voulu enterrer.",
+        personality:"Serein, presque indifférent. Mais a une règle : il ne répond qu'à ceux qui font le voyage jusqu'à lui, seuls, sans escorte.",
+        triggerAlly:["Faire le voyage seule","Lui poser la question juste, pas celle qu'on attendait","Accepter une vérité difficile sur soi-même sans se défendre"],
+        triggerEnemy:["Envoyer quelqu'un à sa place","Arriver en groupe","Chercher une confirmation plutôt qu'une vérité"],
+        allyValue:"Révèle la nature exacte du pouvoir de Lumière d'Irène — et pourquoi Charlotte ne peut pas l'imiter.",
+        enemyValue:"S'il décide de parler à Charlotte à la place, ses révélations peuvent détruire la légitimité d'Irène.",
+        volatile:false
+      },
+      {
+        id:50, name:"Gardienne Rove Sel", initials:"RS", cat:"magie",
+        role:"Gardienne des Reliques · Cercle magique", age:"~40 ans",
+        color:"#EEEDFE", tc:"#3C3489", defaultPos:55, dotColor:"#888780",
+        desc:"Protège les artefacts sacrés du Cercle, y compris la Pierre de Lumière — seul objet capable de confirmer l'authenticité d'un pouvoir divin.",
+        personality:"Rigoureuse, respectueuse des règles à la lettre. Peut être contournée — mais seulement par quelqu'un qui respecte le rituel autant qu'elle.",
+        triggerAlly:["Demander l'accès à la Pierre selon le rituel exact","Lui apporter une preuve de lignée avant de demander quoi que ce soit","Traiter les reliques avec un soin visible"],
+        triggerEnemy:["Forcer l'accès","Traiter les reliques comme des outils","Ignorer le protocole au nom de l'urgence"],
+        allyValue:"Accès à la Pierre de Lumière — preuve irréfutable qu'Irène est l'héritière authentique.",
+        enemyValue:"Peut refuser l'accès indéfiniment si le protocole n'a pas été suivi — et bloquer toute légitimation magique.",
+        volatile:false
+      },
+      {
+        id:51, name:"Sorcière Lenn Varek", initials:"LK", cat:"magie",
+        role:"Sorcière proscrite · Hors du Cercle", age:"~45 ans",
+        color:"#EEEDFE", tc:"#3C3489", defaultPos:50, dotColor:"#7F77DD",
+        desc:"Bannie du Cercle pour avoir pratiqué une magie non répertoriée. Connaît des chemins magiques que le Cercle refuse d'explorer — y compris pour amplifier la Lumière.",
+        personality:"Amère envers le Cercle mais pas envers le monde. Aidera celui qui l'approche sans condescendance.",
+        triggerAlly:["Ne pas mentionner son bannissement comme une faute","Lui demander son aide pour quelque chose que le Cercle ne ferait jamais","L'appeler par son titre de Sorcière, pas de proscrite"],
+        triggerEnemy:["Lui dire qu'elle pourrait 'réintégrer le Cercle si elle se corrigeait'","Utiliser sa magie proscrite sans la créditer","Traiter ses méthodes comme secondaires"],
+        allyValue:"Peut amplifier ou stabiliser les pouvoirs d'Irène hors du cadre du Cercle — utile si le Cercle devient hostile.",
+        enemyValue:"Peut vendre ses connaissances à Charlotte pour créer une réplique convaincante de la Lumière.",
+        volatile:true
+      },
+
+      // PEUPLE (7)
+      {
+        id:52, name:"Leura la Courière", initials:"LC", cat:"peuple",
+        role:"Courière impériale · Réseau de messagers", age:"~22 ans",
+        color:"#EAF3DE", tc:"#27500A", defaultPos:60, dotColor:"#1D9E75",
+        desc:"Parcourt l'Empire en tous sens. Connaît les routes secrètes, les relais discrets, les postes avancés non officiels. Une messagère dont personne ne surveille les allées et venues.",
+        personality:"Libre, indépendante, allergique à l'autorité. Aidera qui lui donnera l'impression de l'avoir choisie, pas utilisée.",
+        triggerAlly:["Lui confier un message personnel, pas politique","Payer ses services sans marchander","Lui demander son opinion sur une route — pas lui donner des ordres"],
+        triggerEnemy:["Traiter le réseau de messagers comme un outil impérial","Intercepter ses messages sans permission","Lui imposer une route pour des raisons politiques"],
+        allyValue:"Communication sécurisée partout dans l'Empire, même en territoire ennemi. Impossible à surveiller.",
+        enemyValue:"Peut refuser de transmettre des messages urgents ou livrer des informations à l'adversaire.",
+        volatile:false
+      },
+      {
+        id:53, name:"Foreron Dast Mael", initials:"DM", cat:"peuple",
+        role:"Forgeron de village · Chef informel du peuple", age:"~47 ans",
+        color:"#EAF3DE", tc:"#27500A", defaultPos:45, dotColor:"#888780",
+        desc:"L'homme fort de son village, respecté dans un rayon de cent lieues. Méfiant envers tous les nobles sans exception — mais il a une dette morale non remboursée.",
+        personality:"Bourru, dur, fier. Mais a une fille malade que les guérisseurs du Cercle ont refusé de soigner. Qui résout ce problème devient son débiteur éternel.",
+        triggerAlly:["Faire soigner sa fille sans rien demander en échange","Venir le voir au village, pas lui envoyer un émissaire","Travailler à ses côtés physiquement, même une heure"],
+        triggerEnemy:["Promettre de l'aide sans tenir parole","Parler de sa fille comme d'une 'situation à régler'","Arriver en escorte armée dans le village"],
+        allyValue:"Mobilise les villages dans un rayon immense. Peut lever une armée de paysans en trois jours.",
+        enemyValue:"Peut organiser une résistance passive totale au passage des troupes d'Irène.",
+        volatile:false
+      },
+      {
+        id:54, name:"Gamine Ysel", initials:"YS", cat:"peuple",
+        role:"Orpheline · Pickpocket · Yeux de la rue", age:"~11 ans",
+        color:"#FAEEDA", tc:"#633806", defaultPos:70, dotColor:"#1D9E75",
+        desc:"Une gamine des rues qui a vu Charlotte brutaliser une famille. Elle sait. Elle attend juste que quelqu'un lui pose la question.",
+        personality:"Méfiante mais loyale à mort envers qui lui montre de la chaleur humaine — pas de la pitié.",
+        triggerAlly:["S'asseoir à sa hauteur et écouter sans prendre de notes","Lui donner de la nourriture sans y attacher de demande","La traiter comme une informatrice sérieuse, pas comme un enfant"],
+        triggerEnemy:["La traiter comme un accessoire","Promettre de la 'mettre à l'abri' dans un orphelinat noble","Lui demander de témoigner en public"],
+        allyValue:"Témoin oculaire incorruptible d'une violence commise par Charlotte. Preuve morale décisive.",
+        enemyValue:"Si Charlotte la trouve avant Irène, elle disparaît — ou pire.",
+        volatile:false
+      },
+      {
+        id:55, name:"Ancienne Maret", initials:"AM", cat:"peuple",
+        role:"Sage-femme · Mémoire vivante du village", age:"~73 ans",
+        color:"#EAF3DE", tc:"#27500A", defaultPos:65, dotColor:"#1D9E75",
+        desc:"A assisté à toutes les naissances du canton depuis cinquante ans. Se souvient de choses que personne d'autre ne sait sur les grandes familles — y compris des Ravel.",
+        personality:"Lente, douce, implacable. N'accorde sa confiance qu'à ceux qui s'assoient et prennent le temps. Refuse les gens pressés par principe.",
+        triggerAlly:["Rester deux jours au village sans chercher à partir","Aider à un accouchement difficile","Lui poser des questions sur le passé sans lui dire pourquoi"],
+        triggerEnemy:["Arriver avec urgence et repartir vite","Révéler qu'on savait déjà la réponse avant de demander","Parler de sa sagesse comme d'une ressource à exploiter"],
+        allyValue:"Témoignage de naissance impossible à falsifier — confirme la légitimité d'Irène par la mémoire populaire.",
+        enemyValue:"Peut raconter des vérités inconfortables sur les Ravel que Charlotte exploitera.",
+        volatile:false
+      },
+      {
+        id:56, name:"Sergent Balt Oryn", initials:"BO", cat:"peuple",
+        role:"Sous-officier · Armée populaire", age:"~31 ans",
+        color:"#EAF3DE", tc:"#27500A", defaultPos:50, dotColor:"#888780",
+        desc:"Soldat de rang. Commande une compagnie de soldats issus du peuple. Connaît les rouages réels du terrain mieux que n'importe quel général.",
+        personality:"Pragmatique, loyal à ses hommes avant tout. Se fiche de l'origine noble ou non — juge sur les actes au combat.",
+        triggerAlly:["Manger avec ses soldats sans table séparée","Prendre la décision qui sauve des vies même si elle est politiquement risquée","Lui donner le crédit d'une victoire en public"],
+        triggerEnemy:["Prendre le crédit de ses victoires","Exposer ses hommes pour un objectif diplomatique","Le ignorer lors d'un briefing stratégique"],
+        allyValue:"Loyauté de la troupe. Si Balt dit qu'Irène est digne, les soldats du peuple la suivent.",
+        enemyValue:"Peut passer des informations tactiques à la faction adverse si Irène le déçoit.",
+        volatile:false
+      },
+      {
+        id:57, name:"Veuve Orla Phen", initials:"OP", cat:"peuple",
+        role:"Tenancière d'auberge · Mémoire des rumeurs", age:"~44 ans",
+        color:"#FAEEDA", tc:"#633806", defaultPos:55, dotColor:"#888780",
+        desc:"Son auberge est au croisement de trois routes commerciales. Elle entend tout, retient tout, et sait distinguer une rumeur vraie d'une rumeur fabriquée.",
+        personality:"Pratique, sans illusion. Ne choisit pas de camp. Mais si Irène lui prouve qu'elle protège les gens ordinaires, Orla deviendra un relais d'information extraordinaire.",
+        triggerAlly:["Régler une injustice subie par un de ses clients en sa présence","Payer ses services au juste prix en or, pas en promesses","Revenir après une première visite — la fidélité lui parle"],
+        triggerEnemy:["Repartir sans payer ou en promettant de 'faire récompenser'","Utiliser son auberge comme base militaire","Mentir sur son identité à la première rencontre"],
+        allyValue:"Plateforme de diffusion de l'image positive d'Irène sur les routes commerciales. Réseau de confiance.",
+        enemyValue:"Peut propager des rumeurs négatives — pas par malice, mais parce qu'elle a entendu et cru.",
+        volatile:false
+      },
+      {
+        id:58, name:"Contrebandier Nox Dreyn", initials:"ND", cat:"peuple",
+        role:"Contrebandier · Passage entre frontières", age:"~36 ans",
+        color:"#F1EFE8", tc:"#444441", defaultPos:50, dotColor:"#7F77DD",
+        desc:"Passe des marchandises — et des personnes — à travers toutes les frontières de l'Empire. Moralement ambigu mais pas cruel.",
+        personality:"Ne travaille qu'en cash, jamais en promesses. Mais a un code : il ne trafique pas les personnes contre leur gré. Ce code est inviolable.",
+        triggerAlly:["Payer en avance sans négocier","Respecter son code sans le juger","Lui sauver la vie ou celle d'un de ses hommes"],
+        triggerEnemy:["Lui demander de transporter quelqu'un contre son gré","Le menacer ou faire allusion à son exposition légale","Tenter de le dénoncer comme levier"],
+        allyValue:"Exfiltration ou infiltration discrète. Peut faire passer Irène — ou une preuve — hors de l'Empire sans laisser de trace.",
+        enemyValue:"Peut être recruté par Charlotte pour faire passer autre chose — ou quelqu'un qui ne reviendra pas.",
+        volatile:true
+      },
+
+      // NORD (5)
+      {
+        id:59, name:"Chamane Yrsa", initials:"YR", cat:"nord",
+        role:"Chamane du Grand Nord · Voix des Esprits", age:"~60 ans",
+        color:"#E1F5EE", tc:"#085041", defaultPos:45, dotColor:"#888780",
+        desc:"Gardienne spirituelle des traditions du Nord. Le peuple du Nord l'écoute plus que Cassian sur les questions d'âme et de légitimité.",
+        personality:"Parle peu mais chaque mot compte. Croit en les signes — si Irène lui en donne un qu'elle ne peut pas fabriquer, Yrsa la reconnaîtra.",
+        triggerAlly:["Traverser un rituel du Nord sans demander d'explication","Lui montrer sa marque de naissance Ravel — elle sait ce qu'elle signifie","Parler sa langue, même maladroitement"],
+        triggerEnemy:["Demander ce que signifie le rituel avant de le faire","Traiter la spiritualité du Nord comme une superstition","Arriver sans cadeau rituel"],
+        allyValue:"Légitimité spirituelle dans le Nord. Si Yrsa dit qu'Irène a reçu la bénédiction des esprits, le peuple du Nord la suit sans question.",
+        enemyValue:"Peut prononcer une malédiction symbolique — qui n'a pas de pouvoir magique, mais isolera Irène de tout le Nord spirituellement.",
+        volatile:false
+      },
+      {
+        id:60, name:"Éclaireur Torn Eld", initials:"TE", cat:"nord",
+        role:"Éclaireur d'élite · Yeux de Cassian", age:"~28 ans",
+        color:"#E1F5EE", tc:"#085041", defaultPos:55, dotColor:"#888780",
+        desc:"Le meilleur éclaireur de Cassian. Connaît les routes secrètes entre l'Empire et le territoire de l'Irsia. A été envoyé au Sud pour surveiller Irène — mais ce qu'il a vu l'a surpris.",
+        personality:"Silencieux. Observe pendant des semaines avant de parler. Son rapport à Cassian sera déterminant pour la relation Irène–Cassian.",
+        triggerAlly:["Remarquer qu'il l'observe sans faire semblant de ne pas le voir","Accomplir quelque chose qui force son respect sans le chercher","Lui parler directement quand les autres l'ignorent"],
+        triggerEnemy:["Tenter de le soudoyer","Paraître différente selon qu'on est observée ou non","Utiliser Cassian comme bouclier face à ses questions"],
+        allyValue:"Son rapport positif à Cassian peut déclencher la confiance du Grand Duc avant même leur première rencontre.",
+        enemyValue:"Un rapport négatif = Cassian arrive au premier rendez-vous avec une méfiance enracinée.",
+        volatile:false
+      },
+      {
+        id:61, name:"Guérisseuse Siv du Nord", initials:"SN", cat:"nord",
+        role:"Guérisseuse du Nord · Tradition orale", age:"~35 ans",
+        color:"#E1F5EE", tc:"#085041", defaultPos:50, dotColor:"#888780",
+        desc:"Maîtrise les plantes et remèdes du Nord — une tradition entièrement différente du Cercle magique du Sud. Peut soigner des blessures que la magie impériale ne comprend pas.",
+        personality:"Fière de sa tradition. Pas hostile au Sud — mais ne tolérera pas qu'on la compare défavorablement aux guérisseurs du Cercle.",
+        triggerAlly:["Demander à apprendre ses techniques avec humilité","Utiliser un de ses remèdes devant les siens","Ne jamais mentionner le Cercle magique comme référence supérieure"],
+        triggerEnemy:["Dire que les méthodes du Cercle sont 'plus efficaces'","Apporter ses propres potions sans demander","Traiter ses remèdes comme un plan B en cas d'échec de la magie"],
+        allyValue:"Réseau médical du Nord. Peut maintenir des armées en état de combat avec des ressources locales seulement.",
+        enemyValue:"Peut refuser de soigner Irène ou ses alliés lors d'une campagne du Nord.",
+        volatile:false
+      },
+      {
+        id:62, name:"Fils aîné Rael Ossyr", initials:"RO", cat:"nord",
+        role:"Fils de Vael Ossyr · Héritier du vassal", age:"~20 ans",
+        color:"#E1F5EE", tc:"#085041", defaultPos:65, dotColor:"#1D9E75",
+        desc:"Fils de Vael Ossyr, le rival interne de Cassian. Contrairement à son père, il a une fascination secrète pour le Sud — et pour la personne qu'est Irène.",
+        personality:"Coincé entre l'héritage paternel et sa propre vision du monde. Une seule conversation honnête avec Irène peut le faire basculer contre son père.",
+        triggerAlly:["Lui parler du Sud sans romantisme ni supériorité","Reconnaître la valeur des guerriers du Nord devant lui","Lui donner quelque chose à protéger — une mission, pas un rôle"],
+        triggerEnemy:["Paraître condescendante envers le Nord","Mentionner son père de façon négative","L'utiliser comme levier contre Vael"],
+        allyValue:"Crée une fracture dans la résistance de Vael. Si son propre fils soutient Irène, Vael perd son autorité morale.",
+        enemyValue:"Si blessé ou humilié, il radicalise son père contre Irène par loyauté familiale.",
+        volatile:true
+      },
+      {
+        id:63, name:"Chasseresse Morne", initials:"MR", cat:"nord",
+        role:"Chasseresse légendaire · Libre du Nord", age:"~32 ans",
+        color:"#E1F5EE", tc:"#085041", defaultPos:50, dotColor:"#7F77DD",
+        desc:"Ne dépend d'aucun seigneur, ne prête allégeance à personne. Respectée de tous dans le Nord pour sa maîtrise. Une voix neutre que même Cassian écoute.",
+        personality:"Solitaire, juste, impossible à acheter. Son opinion se forme lentement mais une fois formée, elle ne change plus. Peut être la voix du peuple du Nord dans les fins tardives.",
+        triggerAlly:["Chasser à ses côtés — sans parler de politique","Lui sauver la vie dans une situation qu'elle ne contrôlait pas","Reconnaître sa liberté explicitement : 'tu ne me dois rien'"],
+        triggerEnemy:["Essayer de l'enrôler formellement","Lui donner un titre ou une mission officielle","Mentionner Cassian comme justification de confiance"],
+        allyValue:"Neutralité transformée en soutien explicite = crédibilité absolue dans le Nord, y compris contre Cassian si nécessaire.",
+        enemyValue:"Son silence ou sa neutralité maintenue brise le momentum d'Irène au Nord à un moment critique.",
+        volatile:false
+      }
+    ];
+
+    let currentFactionTab = 'all';
+
+    function getGaugeColor(pos) {
+      if (pos >= 65) return '#1D9E75';
+      if (pos <= 35) return '#E24B4A';
+      if (pos >= 55) return '#5DCAA5';
+      if (pos <= 45) return '#F09595';
+      return '#888780';
+    }
+
+    function buildSecondaryCardHTML(c) {
+      const gc = getGaugeColor(c.defaultPos);
+      return `
+        <div class="card" onclick="openSecondaryModal(${c.id})" style="background: rgba(26,20,8,0.6); border: 1px solid var(--border-gold); border-radius: 14px; padding: 12px 14px; cursor: pointer; transition: all 0.2s; box-shadow: var(--shadow);">
+          <div class="card-top" style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <div class="av" style="width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; background: ${c.color}; color: ${c.tc}; font-family: 'Cinzel', serif;">${c.initials}</div>
+            <div>
+              <div class="cn" style="font-size: 14px; font-weight: 600; color: var(--gold2); font-family: 'Cinzel', serif;">${c.name}</div>
+              <div class="cr" style="font-size: 12px; color: var(--text-muted); font-style: italic;">${c.role}</div>
+            </div>
+          </div>
+          <div class="gauge-wrap" style="margin: 8px 0 6px;">
+            <div class="gauge-label" style="display: flex; justify-content: space-between; font-size: 10px; color: var(--text-muted); margin-bottom: 3px;">
+              <span>Allié (${c.defaultPos}%)</span>
+              <span>Ennemi</span>
+            </div>
+            <div class="gauge-track" style="height: 6px; border-radius: 3px; background: var(--dark3); border: 1px solid var(--border-gold); overflow: hidden;">
+              <div class="gauge-fill" style="width: ${c.defaultPos}%; height: 100%; background: ${gc}; transition: width 0.4s ease;"></div>
+            </div>
+          </div>
+          <p class="card-desc" style="font-size: 13px; color: var(--text-main); line-height: 1.4; margin-top: 6px;">${c.desc.slice(0, 85)}${c.desc.length > 85 ? '…' : ''}</p>
+        </div>
+      `;
+    }
+
+    // ── STYLES ÉDITION ────────────────────────────────────────────────────────
+    const editStyle = document.createElement('style');
+    editStyle.textContent = `
+      .edit-field {
+        background: rgba(201,163,90,0.07);
+        border: 1px solid transparent;
+        border-radius: 6px;
+        padding: 4px 6px;
+        color: var(--text-main);
+        font-family: 'Crimson Pro', Georgia, serif;
+        font-size: inherit;
+        line-height: 1.45;
+        width: 100%;
+        resize: vertical;
+        transition: border-color 0.2s, background 0.2s;
+      }
+      .edit-field:focus {
+        outline: none;
+        border-color: var(--gold);
+        background: rgba(201,163,90,0.12);
+      }
+      .edit-field-inline {
+        background: rgba(201,163,90,0.07);
+        border: 1px solid transparent;
+        border-radius: 5px;
+        padding: 2px 5px;
+        color: inherit;
+        font-family: inherit;
+        font-size: inherit;
+        transition: border-color 0.2s, background 0.2s;
+      }
+      .edit-field-inline:focus {
+        outline: none;
+        border-color: var(--gold);
+        background: rgba(201,163,90,0.12);
+      }
+      .edit-btn {
+        background: rgba(201,163,90,0.12);
+        border: 1px solid var(--border-gold);
+        color: var(--gold2);
+        border-radius: 6px;
+        padding: 5px 12px;
+        font-family: 'Cinzel', Georgia, serif;
+        font-size: 11px;
+        cursor: pointer;
+        transition: background 0.2s, border-color 0.2s;
+        letter-spacing: 0.5px;
+      }
+      .edit-btn:hover { background: rgba(201,163,90,0.22); border-color: var(--gold2); }
+      .edit-btn.save { background: rgba(29,158,117,0.15); border-color: rgba(29,158,117,0.6); color: #5DCAA5; }
+      .edit-btn.save:hover { background: rgba(29,158,117,0.28); }
+      .edit-mode-badge {
+        font-size: 10px;
+        color: var(--gold3);
+        font-style: italic;
+        margin-left: 6px;
+      }
+      .trigger-list-edit { list-style: none; padding: 0; margin: 0; }
+      .trigger-item-edit {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        margin-bottom: 4px;
+      }
+      .trigger-item-edit input {
+        flex: 1;
+        background: rgba(201,163,90,0.07);
+        border: 1px solid transparent;
+        border-radius: 5px;
+        padding: 3px 6px;
+        color: var(--text-main);
+        font-size: 12px;
+        font-family: 'Crimson Pro', serif;
+        transition: border-color 0.2s;
+      }
+      .trigger-item-edit input:focus { outline: none; border-color: var(--gold); }
+      .del-btn {
+        background: none; border: none; color: #F09595; cursor: pointer; font-size: 14px; padding: 0 3px; line-height: 1;
+      }
+      .add-trigger-btn {
+        background: none; border: 1px dashed var(--border-gold); color: var(--text-muted);
+        border-radius: 5px; padding: 2px 8px; font-size: 11px; cursor: pointer; width: 100%; margin-top: 4px;
+        transition: border-color 0.2s, color 0.2s;
+      }
+      .add-trigger-btn:hover { border-color: var(--gold2); color: var(--gold2); }
+      .modal-scroll { max-height: 85vh; overflow-y: auto; padding-right: 4px; }
+      .modal-scroll::-webkit-scrollbar { width: 4px; }
+      .modal-scroll::-webkit-scrollbar-track { background: transparent; }
+      .modal-scroll::-webkit-scrollbar-thumb { background: var(--gold3); border-radius: 2px; }
+      .volatile-toggle {
+        display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none;
+      }
+      .toggle-track {
+        width: 34px; height: 18px; border-radius: 9px; border: 1px solid var(--border-gold);
+        background: var(--dark3); position: relative; transition: background 0.2s;
+      }
+      .toggle-track.on { background: rgba(201,163,90,0.3); border-color: var(--gold); }
+      .toggle-thumb {
+        width: 12px; height: 12px; border-radius: 50%; background: var(--text-muted);
+        position: absolute; top: 2px; left: 2px; transition: left 0.2s, background 0.2s;
+      }
+      .toggle-track.on .toggle-thumb { left: 18px; background: var(--gold2); }
+      .section-label {
+        color: var(--gold2); font-family: 'Cinzel', Georgia, serif; font-size: 11px;
+        display: block; margin-bottom: 4px; letter-spacing: 0.5px;
+      }
+      .align-slider {
+        -webkit-appearance: none; appearance: none;
+        width: 100%; height: 6px; border-radius: 3px;
+        background: linear-gradient(to right, #1D9E75 0%, #5DCAA5 40%, #888780 50%, #F09595 60%, #E24B4A 100%);
+        outline: none; cursor: pointer; margin: 6px 0 2px;
+      }
+      .align-slider::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none;
+        width: 16px; height: 16px; border-radius: 50%;
+        background: var(--gold2); border: 2px solid var(--dark2); cursor: pointer;
+        box-shadow: 0 0 4px rgba(0,0,0,0.5);
+      }
+    `;
+    document.head.appendChild(editStyle);
+
+    // ── ÉTAT ÉDITION ──────────────────────────────────────────────────────────
+    let _editMode = false;
+    let _currentEditId = null;
+
+    function filterFaction(tab, element) {
+      currentFactionTab = tab;
+      document.querySelectorAll('.faction-tab').forEach(t => t.classList.remove('active'));
+      if(element) element.classList.add('active');
+      renderSecondaryCharacters();
+    }
+
+    function renderSecondaryCharacters() {
+      const grid = document.getElementById('secondary-grid');
+      if(!grid) return;
+      const filtered = CHARS_SECONDARY.filter(c => currentFactionTab === 'all' || c.cat === currentFactionTab);
+      grid.innerHTML = filtered.length
+        ? filtered.map(buildSecondaryCardHTML).join('')
+        : `<div class="empty">Aucun personnage pour ce filtre.</div>`;
+    }
+
+    // ── LECTURE : modale normale ──────────────────────────────────────────────
+    function buildReadModal(c) {
+      const gc = getGaugeColor(c.defaultPos);
+      const allyItems = c.triggerAlly.map(t => `<li style="margin-bottom:4px;">${t}</li>`).join('');
+      const enemyItems = c.triggerEnemy.map(t => `<li style="margin-bottom:4px;">${t}</li>`).join('');
+      return `
+        <div style="background:var(--dark2);border:2px solid var(--gold);border-radius:18px;max-width:580px;width:100%;color:var(--text-main);font-family:'Crimson Pro',serif;position:relative;box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+          <div class="modal-scroll" style="padding:24px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;border-bottom:1px solid var(--border-gold);padding-bottom:12px;">
+              <div style="display:flex;align-items:center;gap:14px;">
+                <div style="width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:justify-content;font-size:15px;font-weight:bold;background:${c.color};color:${c.tc};font-family:'Cinzel',serif;justify-content:center;">${c.initials}</div>
+                <div>
+                  <h2 style="font-family:'Cinzel',serif;color:var(--gold);font-size:18px;margin:0;">${c.name}</h2>
+                  <div style="font-size:13px;color:var(--text-muted);font-style:italic;">${c.role} · ${c.age}</div>
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button class="edit-btn" onclick="openEditModal(${c.id})">✎ Modifier</button>
+                <button onclick="closeSecondaryModal()" style="background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:0 4px;">✕</button>
+              </div>
+            </div>
+
+            <div style="margin-bottom:12px;">
+              <strong class="section-label">DESCRIPTION</strong>
+              <p style="margin:0;line-height:1.45;font-size:13px;">${c.desc}</p>
+            </div>
+
+            <div style="margin-bottom:14px;">
+              <strong class="section-label">PERSONNALITÉ</strong>
+              <p style="margin:0;line-height:1.45;">${c.personality}</p>
+            </div>
+
+            <div style="margin-bottom:16px;">
+              <strong class="section-label">ALIGNEMENT ACTUEL</strong>
+              <div style="height:8px;background:var(--dark3);border:1px solid var(--border-gold);border-radius:4px;overflow:hidden;margin-top:4px;">
+                <div style="width:${c.defaultPos}%;height:100%;background:${gc};"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-muted);margin-top:4px;gap:8px;flex-wrap:wrap;">
+                <span style="color:#5DCAA5;">Allié</span>
+                <span>Position : ${c.defaultPos}%</span>
+                <span style="color:#F09595;">Ennemi</span>
+              </div>
+              ${c.volatile ? `<p style="font-size:12px;color:var(--gold3);margin:6px 0 0;font-style:italic;">⚠ Profil Volatile — Réagit violemment aux faux-pas.</p>` : ''}
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+              <div style="background:rgba(29,158,117,0.1);border:0.5px solid rgba(29,158,117,0.3);padding:10px;border-radius:10px;">
+                <h4 style="font-family:'Cinzel',serif;color:#5DCAA5;font-size:11px;margin:0 0 6px;">FACTEURS ALLIÉ</h4>
+                <ul style="padding-left:14px;margin:0;font-size:12px;line-height:1.3;">${allyItems}</ul>
+              </div>
+              <div style="background:rgba(226,75,74,0.1);border:0.5px solid rgba(226,75,74,0.3);padding:10px;border-radius:10px;">
+                <h4 style="font-family:'Cinzel',serif;color:#F09595;font-size:11px;margin:0 0 6px;">FACTEURS ENNEMI</h4>
+                <ul style="padding-left:14px;margin:0;font-size:12px;line-height:1.3;">${enemyItems}</ul>
+              </div>
+            </div>
+
+            <div style="font-size:13px;line-height:1.4;border-top:1px solid var(--border-gold);padding-top:10px;">
+              <p style="margin:0 0 4px;"><strong style="color:#5DCAA5;">Atout (si allié) :</strong> ${c.allyValue}</p>
+              <p style="margin:0;"><strong style="color:#F09595;">Menace (si ennemi) :</strong> ${c.enemyValue}</p>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    // ── ÉDITION : modale modifiable ───────────────────────────────────────────
+    function buildTriggerListEdit(items, listId) {
+      return items.map((t, i) => `
+        <li class="trigger-item-edit">
+          <input type="text" value="${t.replace(/"/g,'&quot;')}" data-list="${listId}" data-idx="${i}" />
+          <button class="del-btn" onclick="removeTriggerItem('${listId}',${i})" title="Supprimer">×</button>
+        </li>`).join('');
+    }
+
+    function buildEditModal(c) {
+      const gc = getGaugeColor(c.defaultPos);
+      return `
+        <div style="background:var(--dark2);border:2px solid var(--gold);border-radius:18px;max-width:600px;width:100%;color:var(--text-main);font-family:'Crimson Pro',serif;position:relative;box-shadow:0 10px 30px rgba(0,0,0,0.8);">
+          <div class="modal-scroll" style="padding:24px;">
+
+            <!-- En-tête -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;border-bottom:1px solid var(--border-gold);padding-bottom:12px;">
+              <div style="display:flex;align-items:center;gap:12px;">
+                <div style="width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:bold;background:${c.color};color:${c.tc};font-family:'Cinzel',serif;">${c.initials}</div>
+                <div>
+                  <div style="font-size:10px;color:var(--gold3);font-family:'Cinzel',serif;letter-spacing:1px;margin-bottom:4px;">MODE ÉDITION</div>
+                  <input id="edit-name" class="edit-field-inline" value="${c.name}" style="font-family:'Cinzel',serif;color:var(--gold);font-size:17px;font-weight:600;width:260px;" />
+                </div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <button class="edit-btn save" onclick="saveEdits(${c.id})">✓ Sauvegarder</button>
+                <button class="edit-btn" onclick="openSecondaryModal(${c.id})" style="color:var(--text-muted);">Annuler</button>
+                <button onclick="closeSecondaryModal()" style="background:none;border:none;color:var(--gold);font-size:20px;cursor:pointer;padding:0 4px;">✕</button>
+              </div>
+            </div>
+
+            <!-- Rôle + Âge -->
+            <div style="display:grid;grid-template-columns:1fr auto;gap:10px;margin-bottom:14px;">
+              <div>
+                <strong class="section-label">RÔLE</strong>
+                <input id="edit-role" class="edit-field" style="padding:4px 8px;" value="${c.role.replace(/"/g,'&quot;')}" />
+              </div>
+              <div>
+                <strong class="section-label">ÂGE</strong>
+                <input id="edit-age" class="edit-field" style="width:90px;padding:4px 8px;" value="${c.age}" />
+              </div>
+            </div>
+
+            <!-- Description -->
+            <div style="margin-bottom:14px;">
+              <strong class="section-label">DESCRIPTION</strong>
+              <textarea id="edit-desc" class="edit-field" rows="3">${c.desc}</textarea>
+            </div>
+
+            <!-- Personnalité -->
+            <div style="margin-bottom:14px;">
+              <strong class="section-label">PERSONNALITÉ</strong>
+              <textarea id="edit-personality" class="edit-field" rows="3">${c.personality}</textarea>
+            </div>
+
+            <!-- Alignement slider -->
+            <div style="margin-bottom:16px;">
+              <strong class="section-label">ALIGNEMENT — <span id="align-label" style="color:${gc};">${c.defaultPos}%</span></strong>
+              <input type="range" id="edit-align" class="align-slider" min="0" max="100" value="${c.defaultPos}"
+                oninput="document.getElementById('align-label').textContent=this.value+'%'; document.getElementById('align-label').style.color=getGaugeColor(+this.value);" />
+              <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);">
+                <span style="color:#5DCAA5;">◀ Allié</span>
+                <span style="color:#F09595;">Ennemi ▶</span>
+              </div>
+            </div>
+
+            <!-- Volatile toggle -->
+            <div style="margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+              <strong class="section-label" style="margin:0;">PROFIL VOLATILE</strong>
+              <label class="volatile-toggle" onclick="toggleVolatile(this)">
+                <div class="toggle-track ${c.volatile ? 'on' : ''}" id="volatile-track">
+                  <div class="toggle-thumb"></div>
+                </div>
+                <span id="volatile-label" style="font-size:12px;color:var(--text-muted);">${c.volatile ? '⚠ Actif' : 'Inactif'}</span>
+              </label>
+            </div>
+
+            <!-- Facteurs allié -->
+            <div style="margin-bottom:14px;">
+              <strong class="section-label" style="color:#5DCAA5;">FACTEURS ALLIÉ</strong>
+              <ul class="trigger-list-edit" id="list-triggerAlly">
+                ${buildTriggerListEdit(c.triggerAlly, 'triggerAlly')}
+              </ul>
+              <button class="add-trigger-btn" onclick="addTriggerItem('triggerAlly')">+ Ajouter</button>
+            </div>
+
+            <!-- Facteurs ennemi -->
+            <div style="margin-bottom:14px;">
+              <strong class="section-label" style="color:#F09595;">FACTEURS ENNEMI</strong>
+              <ul class="trigger-list-edit" id="list-triggerEnemy">
+                ${buildTriggerListEdit(c.triggerEnemy, 'triggerEnemy')}
+              </ul>
+              <button class="add-trigger-btn" onclick="addTriggerItem('triggerEnemy')">+ Ajouter</button>
+            </div>
+
+            <!-- Atout / Menace -->
+            <div style="border-top:1px solid var(--border-gold);padding-top:12px;">
+              <div style="margin-bottom:10px;">
+                <strong class="section-label" style="color:#5DCAA5;">ATOUT (si allié)</strong>
+                <textarea id="edit-allyValue" class="edit-field" rows="2">${c.allyValue}</textarea>
+              </div>
+              <div>
+                <strong class="section-label" style="color:#F09595;">MENACE (si ennemi)</strong>
+                <textarea id="edit-enemyValue" class="edit-field" rows="2">${c.enemyValue}</textarea>
+              </div>
+            </div>
+
+          </div>
+        </div>`;
+    }
+
+    // ── Fonctions d'interaction édition ──────────────────────────────────────
+    function toggleVolatile(label) {
+      const track = document.getElementById('volatile-track');
+      const lbl = document.getElementById('volatile-label');
+      track.classList.toggle('on');
+      lbl.textContent = track.classList.contains('on') ? '⚠ Actif' : 'Inactif';
+    }
+
+    function addTriggerItem(listId) {
+      const ul = document.getElementById('list-' + listId);
+      const idx = ul.children.length;
+      const li = document.createElement('li');
+      li.className = 'trigger-item-edit';
+      li.innerHTML = `<input type="text" value="" data-list="${listId}" data-idx="${idx}" placeholder="Nouveau déclencheur…" />
+        <button class="del-btn" onclick="removeTriggerItem('${listId}',${idx})" title="Supprimer">×</button>`;
+      ul.appendChild(li);
+      li.querySelector('input').focus();
+    }
+
+    function removeTriggerItem(listId, idx) {
+      const ul = document.getElementById('list-' + listId);
+      const items = ul.querySelectorAll('.trigger-item-edit');
+      if(items[idx]) items[idx].remove();
+    }
+
+    function getTriggerValues(listId) {
+      const ul = document.getElementById('list-' + listId);
+      if(!ul) return [];
+      return Array.from(ul.querySelectorAll('input'))
+        .map(i => i.value.trim()).filter(Boolean);
+    }
+
+    function saveEdits(id) {
+      const c = CHARS_SECONDARY.find(x => x.id === id);
+      if(!c) return;
+
+      c.name        = document.getElementById('edit-name').value.trim() || c.name;
+      c.role        = document.getElementById('edit-role').value.trim() || c.role;
+      c.age         = document.getElementById('edit-age').value.trim() || c.age;
+      c.desc        = document.getElementById('edit-desc').value.trim() || c.desc;
+      c.personality = document.getElementById('edit-personality').value.trim() || c.personality;
+      c.allyValue   = document.getElementById('edit-allyValue').value.trim() || c.allyValue;
+      c.enemyValue  = document.getElementById('edit-enemyValue').value.trim() || c.enemyValue;
+      c.defaultPos  = parseInt(document.getElementById('edit-align').value, 10);
+      c.volatile    = document.getElementById('volatile-track').classList.contains('on');
+
+      const newAlly   = getTriggerValues('triggerAlly');
+      const newEnemy  = getTriggerValues('triggerEnemy');
+      if(newAlly.length)  c.triggerAlly  = newAlly;
+      if(newEnemy.length) c.triggerEnemy = newEnemy;
+
+      // Feedback visuel
+      const btn = document.querySelector('.edit-btn.save');
+      if(btn){ btn.textContent = '✓ Sauvegardé !'; btn.style.opacity='0.7'; }
+
+      renderSecondaryCharacters();
+
+      setTimeout(() => openSecondaryModal(id), 350);
+    }
+
+    // ── Ouverture des modales ─────────────────────────────────────────────────
+    function getOrCreateContainer() {
+      let c = document.getElementById('secondary-modal-layer');
+      if(!c){
+        c = document.createElement('div');
+        c.id = 'secondary-modal-layer';
+        c.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:2000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);padding:18px;";
+        document.body.appendChild(c);
+      }
+      return c;
+    }
+
+    function openSecondaryModal(id) {
+      const c = CHARS_SECONDARY.find(x => x.id === id);
+      if (!c) return;
+      _currentEditId = id;
+      const container = getOrCreateContainer();
+      container.innerHTML = buildReadModal(c);
+      container.style.display = 'flex';
+    }
+
+    function openEditModal(id) {
+      const c = CHARS_SECONDARY.find(x => x.id === id);
+      if (!c) return;
+      _currentEditId = id;
+      const container = getOrCreateContainer();
+      container.innerHTML = buildEditModal(c);
+      container.style.display = 'flex';
+    }
+
+    function closeSecondaryModal() {
+      const container = document.getElementById('secondary-modal-layer');
+      if(container) container.style.display = 'none';
+    }
+
+    function updateCharacterAlignment(id, amount) {
+      const c = CHARS_SECONDARY.find(x => x.id === id);
+      if(c) {
+        c.defaultPos = Math.max(0, Math.min(100, c.defaultPos + amount));
+        renderSecondaryCharacters();
+      }
+    }
+
+    document.addEventListener('click', (e) => {
+      const layer = document.getElementById('secondary-modal-layer');
+      if (layer && e.target === layer) closeSecondaryModal();
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeSecondaryModal();
+    });
+
+    renderSecondaryCharacters();
+  </script>
+</body>
+</html>
